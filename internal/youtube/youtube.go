@@ -9,7 +9,7 @@ import (
 
 const (
 	youtubeAPIURL = "https://www.googleapis.com/youtube/v3/search"
-	apiKey        = "AIzaSyCE92zJ3IfIk0WhZdW0OSU68srX1ZNe8uc" // Replace this with your actual API key
+	apiKey        = "AIzaSyCE92zJ3IfIk0WhZdW0OSU68srX1ZNe8uc"
 )
 
 type YouTubeAPIResponse struct {
@@ -50,4 +50,12 @@ func FetchLatestVideos(query string, publishedAfter time.Time) (*YouTubeAPIRespo
 	}
 
 	return &result, nil
+}
+
+func ConvertToMySQLDateTime(isoDate string) (string, error) {
+	t, err := time.Parse(time.RFC3339, isoDate)
+	if err != nil {
+		return "", err
+	}
+	return t.Format("2006-01-02 15:04:05"), nil
 }
