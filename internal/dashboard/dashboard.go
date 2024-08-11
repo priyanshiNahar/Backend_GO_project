@@ -19,7 +19,8 @@ func ViewDashboard(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pageStr := r.URL.Query().Get("page")
 		limitStr := r.URL.Query().Get("limit")
-		sortBy := r.URL.Query().Get("sortBy") // e.g., "title" or "published_at"
+		sortBy := r.URL.Query().Get("sortBy")
+		filter := r.URL.Query().Get("filter")
 
 		page, err := strconv.Atoi(pageStr)
 		if err != nil || page < 1 {
@@ -33,14 +34,19 @@ func ViewDashboard(db *sql.DB) http.HandlerFunc {
 
 		offset := (page - 1) * limit
 
-		// Default sorting by published_at
 		if sortBy != "title" {
 			sortBy = "published_at"
+		}
+
+		filterCondition := ""
+		if filter != "" {
+			filterCondition = " AND (title LIKE '%" + filter + "%' OR description LIKE '%" + filter + "%')"
 		}
 
 		query := `
 				SELECT video_id, title, description, published_at, thumbnail_url
 				FROM videos
+				WHERE 1=1` + filterCondition + `
 				ORDER BY ` + sortBy + ` DESC
 				LIMIT ? OFFSET ?`
 
