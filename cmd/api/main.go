@@ -3,10 +3,12 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
+	"youtube-api/internal/dashboard"
 	"youtube-api/internal/storage"
 	"youtube-api/internal/youtube"
 
@@ -23,33 +25,26 @@ type Video struct {
 
 func GetVideos(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pageStr := r.URL.Query().Get("page")
-		limitStr := r.URL.Query().Get("limit")
-
-		page, err := strconv.Atoi(pageStr)
-		if err != nil || page < 1 {
-			page = 1
+		page, limit, err := getPaginationParams(r)
+		if err != nil {
+			http.Error(w, "Invalid pagination parameters", http.StatusBadRequest)
+			return
 		}
-
-		limit, err := strconv.Atoi(limitStr)
-		if err != nil || limit < 1 {
-			limit = 10
-		}
-
 		offset := (page - 1) * limit
 
-		rows, err := db.Query(`
-            SELECT video_id, title, description, published_at, thumbnail_url
-            FROM videos
-            ORDER BY published_at DESC
-            LIMIT ? OFFSET ?`, limit, offset)
+		query := `SELECT video_id, title, description, published_at, thumbnail_url
+				  FROM videos
+				  ORDER BY published_at DESC
+				  LIMIT ? OFFSET ?`
+
+		rows, err := db.Query(query, limit, offset)
 		if err != nil {
 			http.Error(w, "Failed to query videos: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
 
-		videos := []Video{}
+		var videos []Video
 		for rows.Next() {
 			var video Video
 			if err := rows.Scan(&video.VideoID, &video.Title, &video.Description, &video.PublishedAt, &video.ThumbnailURL); err != nil {
@@ -67,45 +62,52 @@ func GetVideos(db *sql.DB) http.HandlerFunc {
 func SearchVideos(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query().Get("query")
-		pageStr := r.URL.Query().Get("page")
-		limitStr := r.URL.Query().Get("limit")
-
-		page, err := strconv.Atoi(pageStr)
-		if err != nil || page < 1 {
-			page = 1
+		if query == "" {
+			http.Error(w, "Query parameter is required", http.StatusBadRequest)
+			return
 		}
 
-		limit, err := strconv.Atoi(limitStr)
-		if err != nil || limit < 1 {
-			limit = 10
+		page, limit, err := getPaginationParams(r)
+		if err != nil {
+			http.Error(w, "Invalid pagination parameters", http.StatusBadRequest)
+			return
 		}
-
 		offset := (page - 1) * limit
+		sortBy := r.URL.Query().Get("sortBy")
+		if sortBy == "" {
+			sortBy = "published_at"
+		}
 
-		rows, err := db.Query(`
-            SELECT video_id, title, description, published_at, thumbnail_url
-            FROM videos
-            WHERE title LIKE ? OR description LIKE ?
-            ORDER BY published_at DESC
-            LIMIT ? OFFSET ?`, "%"+query+"%", "%"+query+"%", limit, offset)
+		sqlQuery := fmt.Sprintf(`
+			SELECT video_id, title, description, published_at, thumbnail_url
+			FROM videos
+			WHERE title LIKE ?
+			ORDER BY %s
+			LIMIT ? OFFSET ?`, sortBy)
+
+		rows, err := db.Query(sqlQuery, "%"+query+"%", limit, offset)
 		if err != nil {
 			http.Error(w, "Failed to query videos: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
 
-		videos := []Video{}
+		var results []Video
 		for rows.Next() {
 			var video Video
 			if err := rows.Scan(&video.VideoID, &video.Title, &video.Description, &video.PublishedAt, &video.ThumbnailURL); err != nil {
 				http.Error(w, "Failed to scan row: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			videos = append(videos, video)
+			results = append(results, video)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(videos)
+		if len(results) == 0 {
+			w.Write([]byte("[]")) // Return empty array if no results
+		} else {
+			json.NewEncoder(w).Encode(results)
+		}
 	}
 }
 
@@ -120,21 +122,34 @@ func fetchAndStoreVideos(db *sql.DB, query string) {
 			continue
 		}
 
-		log.Printf("successfully Fetched videos.")
-
 		if len(videos.Items) == 0 {
 			log.Println("No videos found.")
 		} else {
-			err = storage.StoreVideos(db, videos)
-			if err != nil {
+			if err = storage.StoreVideos(db, videos); err != nil {
 				log.Printf("Failed to store videos: %v", err)
 			} else {
 				log.Println("Successfully stored videos.")
 			}
 		}
-
 		time.Sleep(10 * time.Second)
 	}
+}
+
+func getPaginationParams(r *http.Request) (int, int, error) {
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 {
+		limit = 10
+	}
+
+	return page, limit, nil
 }
 
 func main() {
@@ -149,6 +164,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/videos", GetVideos(db)).Methods("GET")
 	r.HandleFunc("/search", SearchVideos(db)).Methods("GET")
+	r.HandleFunc("/dashboard", dashboard.ViewDashboard(db)).Methods("GET")
 
 	log.Println("Server is running on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", r))

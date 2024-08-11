@@ -1,0 +1,8 @@
+# Ignore the vendor directory
+vendor/
+
+# Ignore local environment files
+.env
+
+# Ignore other files not needed in the container
+*.md
