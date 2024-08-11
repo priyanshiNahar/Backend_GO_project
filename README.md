@@ -4,33 +4,29 @@
 
 This project provides a backend service for fetching, storing, and serving YouTube videos based on search queries. It uses a combination of a Go server, MySQL database, and Docker for containerization.
 
+
+
 ## Project Structure
 
-.
-│   .dockerignore
-│   docker-compose.yml
-│   Dockerfile
-│   go.mod
-│   go.sum
-│   README.md
-│   videos.sql
-│
-├───cmd
-│   └───api
-│           main.go
-│
-├───config
-│       config.go
-│
-└───internal
-    ├───dashboard
-    │       dashboard.go
-    │
-    ├───storage
-    │       storage.go
-    │
-    └───youtube
-            youtube.go
+- `.dockerignore`
+- `docker-compose.yml`
+- `Dockerfile`
+- `go.mod`
+- `go.sum`
+- `README.md`
+- `videos.sql`
+- `cmd/`
+  - `api/`
+    - `main.go`
+- `config/`
+  - `config.go`
+- `internal/`
+  - `dashboard/`
+    - `dashboard.go`
+  - `storage/`
+    - `storage.go`
+  - `youtube/`
+    - `youtube.go`
 
 
 ## How to Run
